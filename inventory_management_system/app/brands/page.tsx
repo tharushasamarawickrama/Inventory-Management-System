@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/utils/supabase/client";
 import { Brand } from "@/types/brands";
 import AddBrandModal from "@/components/AddBrandModal";
+import ConfirmationModal from "@/components/ConfirmationModal";
 
 export default function BrandsPage() {
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -12,19 +13,51 @@ export default function BrandsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [recordsPerPage, setRecordsPerPage] = useState(10);
+  const [totalRecords, setTotalRecords] = useState(0);
 
-  // Fetch brands from Supabase
-  const fetchBrands = async () => {
+  // Confirmation modal states
+  const [confirmationModal, setConfirmationModal] = useState({
+    isOpen: false,
+    brandId: 0,
+    brandName: "",
+    isDeleting: false
+  });
+
+  // Fetch brands from Supabase with pagination
+  const fetchBrands = async (page = 1, perPage = recordsPerPage, search = searchTerm) => {
     try {
       setIsLoading(true);
-      const { data, error: supabaseError } = await supabase
+      
+      let query = supabase
         .from('brands')
-        .select('*')
-        .is('deletedat', null) // Only get non-deleted brands
-        .order('createdat', { ascending: true });
+        .select('*', { count: 'exact' })
+        .is('deletedat', null);
+
+      // Add search filter if search term exists
+      if (search.trim()) {
+        query = query.ilike('brandname', `%${search.trim()}%`);
+      }
+
+      // Add pagination only if not showing all records
+      if (perPage !== -1) {
+        const from = (page - 1) * perPage;
+        const to = from + perPage - 1;
+        query = query.range(from, to);
+      }
+
+      query = query.order('id', { ascending: true });
+
+      const { data, error: supabaseError, count } = await query;
 
       if (supabaseError) throw supabaseError;
+      
       setBrands(data || []);
+      setTotalRecords(count || 0);
+      setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch brands");
     } finally {
@@ -33,35 +66,77 @@ export default function BrandsPage() {
   };
 
   useEffect(() => {
-    fetchBrands();
-  }, []);
+    fetchBrands(currentPage, recordsPerPage, searchTerm);
+  }, [currentPage, recordsPerPage]);
 
-  // Filter brands based on search term
-  const filteredBrands = brands.filter(brand =>
-    brand.brandname.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Handle search with debounce
+  useEffect(() => {
+    const delayedSearch = setTimeout(() => {
+      setCurrentPage(1); // Reset to first page when searching
+      fetchBrands(1, recordsPerPage, searchTerm);
+    }, 500);
+
+    return () => clearTimeout(delayedSearch);
+  }, [searchTerm]);
+
+  // Calculate pagination info
+  const totalPages = recordsPerPage === -1 ? 1 : Math.ceil(totalRecords / recordsPerPage);
+  const startRecord = recordsPerPage === -1 ? 1 : (currentPage - 1) * recordsPerPage + 1;
+  const endRecord = recordsPerPage === -1 ? totalRecords : Math.min(currentPage * recordsPerPage, totalRecords);
 
   const handleBrandAdded = (newBrand: Brand) => {
     setBrands(prev => [newBrand, ...prev]);
+    setTotalRecords(prev => prev + 1);
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this brand?")) return;
+  // Open confirmation modal
+  const handleDeleteClick = (id: number, brandName: string) => {
+    setConfirmationModal({
+      isOpen: true,
+      brandId: id,
+      brandName: brandName,
+      isDeleting: false
+    });
+  };
 
+  // Close confirmation modal
+  const handleDeleteCancel = () => {
+    setConfirmationModal({
+      isOpen: false,
+      brandId: 0,
+      brandName: "",
+      isDeleting: false
+    });
+  };
+
+  // Confirm deletion
+  const handleDeleteConfirm = async () => {
     try {
+      setConfirmationModal(prev => ({ ...prev, isDeleting: true }));
+
       const { error: supabaseError } = await supabase
         .from('brands')
         .update({
           deletedat: new Date().toISOString(),
-          deletedby: 'current_user' // Replace with actual user
+          deletedby: 'current_user'
         })
-        .eq('id', id);
+        .eq('id', confirmationModal.brandId);
 
       if (supabaseError) throw supabaseError;
       
       // Remove from local state
-      setBrands(prev => prev.filter(brand => brand.id !== id));
+      setBrands(prev => prev.filter(brand => brand.id !== confirmationModal.brandId));
+      setTotalRecords(prev => prev - 1);
+      
+      // Close modal
+      handleDeleteCancel();
+      
+      // Show success message (optional)
+      // You can implement a toast notification here
+      
     } catch (err) {
+      // Handle error
+      setConfirmationModal(prev => ({ ...prev, isDeleting: false }));
       alert(err instanceof Error ? err.message : "Failed to delete brand");
     }
   };
@@ -75,7 +150,7 @@ export default function BrandsPage() {
         .update({
           brandname: newName.trim(),
           updatedat: new Date().toISOString(),
-          updatedby: 'current_user' // Replace with actual user
+          updatedby: 'current_user'
         })
         .eq('id', id);
 
@@ -90,6 +165,51 @@ export default function BrandsPage() {
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to update brand");
     }
+  };
+
+  const handleRecordsPerPageChange = (newPerPage: number) => {
+    setRecordsPerPage(newPerPage);
+    setCurrentPage(1);
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  // Generate page numbers for pagination
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisiblePages = 5;
+    
+    if (totalPages <= maxVisiblePages) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      if (currentPage <= 3) {
+        for (let i = 1; i <= 4; i++) {
+          pages.push(i);
+        }
+        pages.push('...');
+        pages.push(totalPages);
+      } else if (currentPage >= totalPages - 2) {
+        pages.push(1);
+        pages.push('...');
+        for (let i = totalPages - 3; i <= totalPages; i++) {
+          pages.push(i);
+        }
+      } else {
+        pages.push(1);
+        pages.push('...');
+        for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+          pages.push(i);
+        }
+        pages.push('...');
+        pages.push(totalPages);
+      }
+    }
+    
+    return pages;
   };
 
   return (
@@ -118,9 +238,9 @@ export default function BrandsPage() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Search Bar and Create Button */}
+        {/* Search Bar, Records Per Page, and Create Button */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 mb-6">
-          <div className="flex flex-col sm:flex-row gap-4 items-end">
+          <div className="flex flex-col lg:flex-row gap-4 items-end">
             <div className="flex-1">
               <label htmlFor="search" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Search
@@ -134,14 +254,46 @@ export default function BrandsPage() {
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
               />
             </div>
+            <div className="min-w-[160px]">
+              <label htmlFor="recordsPerPage" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Records per page
+              </label>
+              <select
+                id="recordsPerPage"
+                value={recordsPerPage}
+                onChange={(e) => handleRecordsPerPageChange(Number(e.target.value))}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+              >
+                <option value={5}>5 records</option>
+                <option value={10}>10 records</option>
+                <option value={20}>20 records</option>
+                <option value={-1}>All records</option>
+              </select>
+            </div>
             <button
               onClick={() => setIsModalOpen(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors font-medium"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors font-medium whitespace-nowrap"
             >
-              Create
+              Create Brand
             </button>
           </div>
         </div>
+
+        {/* Records Info */}
+        {!isLoading && !error && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 mb-6">
+            <div className="flex justify-between items-center text-sm text-gray-600 dark:text-gray-300">
+              <span>
+                Showing {startRecord} to {endRecord} of {totalRecords} records
+              </span>
+              {recordsPerPage !== -1 && (
+                <span>
+                  Page {currentPage} of {totalPages}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Brands Table */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden">
@@ -153,7 +305,7 @@ export default function BrandsPage() {
             <div className="p-8 text-center">
               <div className="text-red-600 dark:text-red-400">{error}</div>
               <button 
-                onClick={fetchBrands}
+                onClick={() => fetchBrands(currentPage, recordsPerPage, searchTerm)}
                 className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
               >
                 Retry
@@ -176,18 +328,18 @@ export default function BrandsPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {filteredBrands.map((brand) => (
+                  {brands.map((brand) => (
                     <BrandRow 
                       key={brand.id} 
                       brand={brand} 
                       onUpdate={handleUpdate}
-                      onDelete={handleDelete}
+                      onDelete={handleDeleteClick}
                     />
                   ))}
                 </tbody>
               </table>
 
-              {filteredBrands.length === 0 && !isLoading && (
+              {brands.length === 0 && (
                 <div className="p-8 text-center">
                   <div className="text-gray-500 dark:text-gray-400">
                     {searchTerm ? "No brands found matching your search." : "No brands found."}
@@ -197,6 +349,48 @@ export default function BrandsPage() {
             </div>
           )}
         </div>
+
+        {/* Pagination */}
+        {!isLoading && !error && recordsPerPage !== -1 && totalPages > 1 && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 mt-6">
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Previous
+              </button>
+
+              <div className="flex space-x-2">
+                {getPageNumbers().map((page, index) => (
+                  <button
+                    key={index}
+                    onClick={() => typeof page === 'number' ? handlePageChange(page) : null}
+                    disabled={page === '...'}
+                    className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      page === currentPage
+                        ? 'bg-blue-600 text-white'
+                        : page === '...'
+                        ? 'text-gray-400 dark:text-gray-500 cursor-default'
+                        : 'text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add Brand Modal */}
@@ -205,11 +399,24 @@ export default function BrandsPage() {
         onClose={() => setIsModalOpen(false)}
         onBrandAdded={handleBrandAdded}
       />
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmationModal.isOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Brand"
+        message={`Are you sure you want to delete "${confirmationModal.brandName}"? This action cannot be undone.`}
+        confirmText="Delete Brand"
+        cancelText="Cancel"
+        type="danger"
+        isLoading={confirmationModal.isDeleting}
+      />
     </div>
   );
 }
 
-// Brand Row Component with inline editing
+// Updated Brand Row Component
 function BrandRow({ 
   brand, 
   onUpdate, 
@@ -217,7 +424,7 @@ function BrandRow({
 }: { 
   brand: Brand; 
   onUpdate: (id: number, name: string) => void;
-  onDelete: (id: number) => void;
+  onDelete: (id: number, name: string) => void; // Updated to pass brand name
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(brand.brandname);
@@ -282,7 +489,7 @@ function BrandRow({
                 Update
               </button>
               <button
-                onClick={() => onDelete(brand.id)}
+                onClick={() => onDelete(brand.id, brand.brandname)}
                 className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
               >
                 Delete
