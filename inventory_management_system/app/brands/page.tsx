@@ -85,8 +85,10 @@ export default function BrandsPage() {
   const endRecord = recordsPerPage === -1 ? totalRecords : Math.min(currentPage * recordsPerPage, totalRecords);
 
   const handleBrandAdded = (newBrand: Brand) => {
-    setBrands(prev => [newBrand, ...prev]);
+    // setBrands(prev => [...prev,newBrand,]);
+    // setTotalRecords(prev => prev + 1);
     setTotalRecords(prev => prev + 1);
+    fetchBrands(currentPage, recordsPerPage, searchTerm);
   };
 
   // Open confirmation modal
