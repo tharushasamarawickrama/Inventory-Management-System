@@ -85,8 +85,6 @@ export default function BrandsPage() {
   const endRecord = recordsPerPage === -1 ? totalRecords : Math.min(currentPage * recordsPerPage, totalRecords);
 
   const handleBrandAdded = (newBrand: Brand) => {
-    // setBrands(prev => [...prev,newBrand,]);
-    // setTotalRecords(prev => prev + 1);
     setTotalRecords(prev => prev + 1);
     fetchBrands(currentPage, recordsPerPage, searchTerm);
   };
@@ -132,9 +130,6 @@ export default function BrandsPage() {
       
       // Close modal
       handleDeleteCancel();
-      
-      // Show success message (optional)
-      // You can implement a toast notification here
       
     } catch (err) {
       // Handle error
@@ -240,9 +235,10 @@ export default function BrandsPage() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Search Bar, Records Per Page, and Create Button */}
+        
+        {/* Search Bar and Create Button */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 mb-6">
-          <div className="flex flex-col lg:flex-row gap-4 items-end">
+          <div className="flex flex-col sm:flex-row gap-4 items-end">
             <div className="flex-1">
               <label htmlFor="search" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Search
@@ -255,22 +251,6 @@ export default function BrandsPage() {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
               />
-            </div>
-            <div className="min-w-[160px]">
-              <label htmlFor="recordsPerPage" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Records per page
-              </label>
-              <select
-                id="recordsPerPage"
-                value={recordsPerPage}
-                onChange={(e) => handleRecordsPerPageChange(Number(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-              >
-                <option value={5}>5 records</option>
-                <option value={10}>10 records</option>
-                <option value={20}>20 records</option>
-                <option value={-1}>All records</option>
-              </select>
             </div>
             <button
               onClick={() => setIsModalOpen(true)}
@@ -352,45 +332,89 @@ export default function BrandsPage() {
           )}
         </div>
 
-        {/* Pagination */}
-        {!isLoading && !error && recordsPerPage !== -1 && totalPages > 1 && (
+        {/* Bottom Section: Pagination and Records Per Page */}
+        {!isLoading && !error && (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 mt-6">
-            <div className="flex items-center justify-between">
-              <button
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                Previous
-              </button>
-
-              <div className="flex space-x-2">
-                {getPageNumbers().map((page, index) => (
+            {/* When pagination is available */}
+            {recordsPerPage !== -1 && totalPages > 1 ? (
+              <div className="flex flex-col lg:flex-row items-center justify-between gap-4">
+                {/* Pagination Controls */}
+                <div className="flex items-center gap-2 order-2 lg:order-1">
                   <button
-                    key={index}
-                    onClick={() => typeof page === 'number' ? handlePageChange(page) : null}
-                    disabled={page === '...'}
-                    className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                      page === currentPage
-                        ? 'bg-blue-600 text-white'
-                        : page === '...'
-                        ? 'text-gray-400 dark:text-gray-500 cursor-default'
-                        : 'text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500'
-                    }`}
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    {page}
+                    Previous
                   </button>
-                ))}
-              </div>
 
-              <button
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                Next
-              </button>
-            </div>
+                  <div className="flex space-x-2">
+                    {getPageNumbers().map((page, index) => (
+                      <button
+                        key={index}
+                        onClick={() => typeof page === 'number' ? handlePageChange(page) : null}
+                        disabled={page === '...'}
+                        className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                          page === currentPage
+                            ? 'bg-blue-600 text-white'
+                            : page === '...'
+                            ? 'text-gray-400 dark:text-gray-500 cursor-default'
+                            : 'text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+
+                {/* Records Per Page Dropdown */}
+                <div className="flex items-center gap-2 order-1 lg:order-2">
+                  <label htmlFor="recordsPerPage" className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                    Records per page:
+                  </label>
+                  <select
+                    id="recordsPerPage"
+                    value={recordsPerPage}
+                    onChange={(e) => handleRecordsPerPageChange(Number(e.target.value))}
+                    className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white text-sm"
+                  >
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={-1}>All</option>
+                  </select>
+                </div>
+              </div>
+            ) : (
+              /* When no pagination (single page or "All records" mode) */
+              <div className="flex justify-end">
+                <div className="flex items-center gap-2">
+                  <label htmlFor="recordsPerPage" className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                    Records per page:
+                  </label>
+                  <select
+                    id="recordsPerPage"
+                    value={recordsPerPage}
+                    onChange={(e) => handleRecordsPerPageChange(Number(e.target.value))}
+                    className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white text-sm"
+                  >
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={-1}>All</option>
+                  </select>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -418,7 +442,7 @@ export default function BrandsPage() {
   );
 }
 
-// Updated Brand Row Component
+// Brand Row Component remains the same
 function BrandRow({ 
   brand, 
   onUpdate, 
@@ -426,7 +450,7 @@ function BrandRow({
 }: { 
   brand: Brand; 
   onUpdate: (id: number, name: string) => void;
-  onDelete: (id: number, name: string) => void; // Updated to pass brand name
+  onDelete: (id: number, name: string) => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(brand.brandname);
